@@ -8,6 +8,7 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
+from tqdm.auto import tqdm
 
 from approach.ResEmoteNet import ResEmoteNet
 
@@ -95,7 +96,11 @@ def evaluate(model: torch.nn.Module, loader: DataLoader, device: torch.device, i
     all_preds: List[int] = []
     all_labels: List[int] = []
 
-    for images, labels in loader:
+    dataset_size = len(loader.dataset)
+    num_batches = len(loader)
+    print(f"資料集大小：{dataset_size}，批次數：{num_batches}，batch_size：{loader.batch_size}")
+
+    for images, labels in tqdm(loader, desc='Evaluating', total=num_batches, leave=True):
         images = images.to(device)
         labels = labels.to(device)
 
