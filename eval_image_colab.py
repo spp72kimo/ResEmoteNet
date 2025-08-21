@@ -5,6 +5,7 @@ import torchvision.transforms as transforms
 from PIL import Image
 import numpy as np
 from approach.ResEmoteNet import ResEmoteNet
+import argparse
 import matplotlib.pyplot as plt
 
 # 使用 Colab 的 GPU
@@ -14,11 +15,19 @@ print(f"使用設備: {device}")
 # 情緒標籤
 emotions = ['happy', 'surprise', 'sad', 'anger', 'disgust', 'fear', 'neutral']
 
-# 載入模型
-model = ResEmoteNet().to(device)
-checkpoint = torch.load('best_model.pth', weights_only=True)
-model.load_state_dict(checkpoint['model_state_dict'])
-model.eval()
+model = None
+
+def load_model(weights_path: str):
+    global model
+    model = ResEmoteNet().to(device)
+    try:
+        checkpoint = torch.load(weights_path, map_location=device, weights_only=True)
+    except TypeError:
+        checkpoint = torch.load(weights_path, map_location=device)
+    state = checkpoint['model_state_dict'] if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint else checkpoint
+    model.load_state_dict(state)
+    model.eval()
+    return model
 
 # 圖像預處理
 transform = transforms.Compose([
@@ -39,6 +48,8 @@ def detect_emotion(image):
 def analyze_image(image_path):
     # 載入圖片
     image = cv2.imread(image_path)
+    if image is None:
+        raise FileNotFoundError(f"Image not found: {image_path}")
     image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     
     # 人臉檢測
@@ -74,21 +85,23 @@ def analyze_image(image_path):
             print(f"  {emotion}: {emotion_scores[i]:.3f}")
         print(f"主要情緒: {max_emotion} (信心度: {confidence:.3f})")
     
-    # 顯示結果圖片
-    plt.figure(figsize=(12, 8))
-    plt.imshow(image_rgb)
-    plt.title("ResEmoteNet 情緒分析結果")
-    plt.axis('off')
-    plt.show()
-    
+    if len(faces) == 0:
+        print("未偵測到人臉。將輸出原始圖片。")
     return image_rgb
 
-# 使用範例
-# 1. 上傳圖片到 Colab
-from google.colab import files
-uploaded = files.upload()
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--image', required=True, help='輸入圖片路徑')
+    parser.add_argument('--weights', required=True, help='模型權重 .pth 路徑')
+    parser.add_argument('--out', default='result.png', help='輸出結果圖片路徑')
+    args = parser.parse_args()
 
-# 2. 分析上傳的圖片
-for filename in uploaded.keys():
-    print(f"\n分析圖片: {filename}")
-    result = analyze_image(filename)
+    load_model(args.weights)
+    result_img = analyze_image(args.image)
+
+    plt.figure(figsize=(12, 8))
+    plt.imshow(result_img)
+    plt.title("ResEmoteNet 情緒分析結果")
+    plt.axis('off')
+    plt.savefig(args.out, bbox_inches='tight')
+    print(f"結果已儲存: {args.out}")
