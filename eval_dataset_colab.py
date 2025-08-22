@@ -156,22 +156,48 @@ def create_dataloader(data_dir: str, batch_size: int, num_workers: int, max_samp
     # 如果指定了最大樣本數，則創建子集
     if max_samples and max_samples < len(dataset):
         print(f"原始數據集大小：{len(dataset)}，限制為：{max_samples} 個樣本")
-        # 為了保持類別平衡，我們從每個類別中選擇樣本
+        
+        # 優化：一次性遍歷數據集，按類別分組
+        print("正在進行智能採樣...")
+        class_indices = {}
+        
+        # 只遍歷一次數據集，並顯示進度條
+        for i, (_, label) in tqdm(enumerate(dataset), 
+                                 desc="🔍 掃描數據集", 
+                                 total=len(dataset),
+                                 unit="樣本",
+                                 leave=True):
+            if label not in class_indices:
+                class_indices[label] = []
+            class_indices[label].append(i)
+        
+        # 計算每個類別的目標樣本數
+        num_classes = len(idx_to_class)
+        max_per_class = max(1, max_samples // num_classes)
+        
+        print(f"📊 開始平衡採樣（每類最多 {max_per_class} 個樣本）...")
+        
+        # 從每個類別中選擇樣本
         indices = []
-        for class_idx in range(len(idx_to_class)):
-            class_indices = [i for i, (_, label) in enumerate(dataset) if label == class_idx]
-            if class_indices:
-                # 從每個類別中選擇 min(max_samples_per_class, len(class_indices)) 個樣本
-                max_per_class = max(1, max_samples // len(idx_to_class))
-                selected = class_indices[:min(max_per_class, len(class_indices))]
+        for class_idx in tqdm(range(num_classes), 
+                             desc="📈 採樣各類別", 
+                             total=num_classes,
+                             unit="類別",
+                             leave=True):
+            if class_idx in class_indices:
+                available_samples = len(class_indices[class_idx])
+                samples_to_take = min(max_per_class, available_samples)
+                selected = class_indices[class_idx][:samples_to_take]
                 indices.extend(selected)
+                print(f"  ✅ 類別 {idx_to_class[class_idx]}: {samples_to_take}/{available_samples} 樣本")
         
         # 如果總數超過限制，則截斷
         if len(indices) > max_samples:
             indices = indices[:max_samples]
+            print(f"  ⚠️  總樣本數超過限制，截斷至 {max_samples}")
         
         dataset = Subset(dataset, indices)
-        print(f"實際選擇樣本數：{len(dataset)}")
+        print(f"🎯 採樣完成！實際選擇樣本數：{len(dataset)}")
 
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
     return loader, idx_to_class
@@ -267,6 +293,8 @@ def calculate_roc_auc(y_true: List[int], y_pred_probs: np.ndarray, idx_to_class:
 def measure_computational_efficiency(model: torch.nn.Module, loader: DataLoader, device: torch.device, 
                                    num_runs: int = 10) -> Dict:
     """測量計算效率：推理時間、模型大小、FLOPs"""
+    print(f"⚙️  開始測量計算效率...")
+    
     # 模型大小
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -274,12 +302,23 @@ def measure_computational_efficiency(model: torch.nn.Module, loader: DataLoader,
     # 模型大小（MB）
     model_size_mb = sum(p.numel() * p.element_size() for p in model.parameters()) / (1024 * 1024)
     
+    print(f"📊 模型參數統計：")
+    print(f"  📈 總參數：{total_params:,}")
+    print(f"  🔧 可訓練參數：{trainable_params:,}")
+    print(f"  💾 模型大小：{model_size_mb:.2f} MB")
+    
     # 推理時間測量
     model.eval()
     inference_times = []
     
+    print(f"⏱️  測量推理時間（{num_runs} 次運行）...")
+    
     with torch.no_grad():
-        for _ in range(num_runs):
+        for run_idx in tqdm(range(num_runs), 
+                           desc="⚡ 推理測試", 
+                           total=num_runs,
+                           unit="次",
+                           leave=True):
             # 使用一個批次進行測試
             try:
                 batch = next(iter(loader))
@@ -292,22 +331,35 @@ def measure_computational_efficiency(model: torch.nn.Module, loader: DataLoader,
                 
                 inference_time = (end_time - start_time) * 1000  # 轉換為毫秒
                 inference_times.append(inference_time)
+                
+                # 顯示每次運行的結果
+                print(f"  🏃 運行 {run_idx + 1}: {inference_time:.2f} ms")
+                
             except StopIteration:
+                print(f"  ⚠️  批次數據不足，停止測試")
                 break
     
     avg_inference_time = np.mean(inference_times) if inference_times else 0
     std_inference_time = np.std(inference_times) if inference_times else 0
     
+    print(f"📊 推理時間統計：")
+    print(f"  🎯 平均時間：{avg_inference_time:.2f} ms")
+    print(f"  📏 標準差：{std_inference_time:.2f} ms")
+    
     # 估算 FLOPs（簡化版本）
-    # 注意：這是一個粗略估算，實際的 FLOPs 計算需要更複雜的工具
+    print(f"🧮 估算 FLOPs...")
     sample_input = torch.randn(1, 3, 64, 64).to(device)
     try:
         with torch.no_grad():
             _ = model(sample_input)
         # 這裡可以添加更精確的 FLOPs 計算
         estimated_flops = "需要安裝 thop 或 ptflops 進行精確計算"
-    except:
-        estimated_flops = "計算失敗"
+        print(f"  ℹ️  FLOPs 估算：{estimated_flops}")
+    except Exception as e:
+        estimated_flops = f"計算失敗：{str(e)}"
+        print(f"  ❌ FLOPs 估算失敗：{estimated_flops}")
+    
+    print(f"✅ 計算效率測量完成！")
     
     return {
         'total_parameters': total_params,
@@ -392,9 +444,17 @@ def evaluate(model: torch.nn.Module, loader: DataLoader, device: torch.device, i
 
     dataset_size = len(loader.dataset)
     num_batches = len(loader)
-    print(f"資料集大小：{dataset_size}，批次數：{num_batches}，batch_size：{loader.batch_size}")
+    print(f"🚀 開始評估...")
+    print(f"📊 資料集大小：{dataset_size:,} 個樣本")
+    print(f"🔄 批次數：{num_batches}，批次大小：{loader.batch_size}")
+    print(f"⚡ 使用設備：{device}")
 
-    for images, labels in tqdm(loader, desc='Evaluating', total=num_batches, leave=True):
+    # 評估進度條
+    for batch_idx, (images, labels) in enumerate(tqdm(loader, 
+                                                      desc="🔍 評估中", 
+                                                      total=num_batches, 
+                                                      unit="批次",
+                                                      leave=True)):
         images = images.to(device)
         labels = labels.to(device)
 
@@ -409,11 +469,19 @@ def evaluate(model: torch.nn.Module, loader: DataLoader, device: torch.device, i
         all_labels.extend(labels.cpu().tolist())
         all_probs.extend(probs.cpu().numpy())
 
+        # 統計每個類別的結果
         for y, p in zip(labels.cpu().tolist(), preds.cpu().tolist()):
             true_c = idx_to_class[y]
             per_class_total[true_c] += 1
             if y == p:
                 per_class_correct[true_c] += 1
+        
+        # 每 10 個批次顯示進度
+        if (batch_idx + 1) % 10 == 0:
+            current_accuracy = correct / total
+            print(f"  📈 批次 {batch_idx + 1}/{num_batches} - 當前準確率: {current_accuracy:.4f}")
+
+    print(f"✅ 評估完成！正在計算詳細指標...")
 
     # 計算詳細指標
     metrics = calculate_metrics(all_labels, all_preds, idx_to_class)
