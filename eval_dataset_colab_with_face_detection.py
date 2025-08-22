@@ -416,11 +416,14 @@ def create_dataloader(data_dir: str, batch_size: int, num_workers: int,
             balanced_samples = []
             
             # 按類別分組樣本
+            print("📊 正在按類別分組樣本...")
             class_samples = {}
             for i, (img_path, emotion_idx, face_box) in enumerate(dataset.samples):
                 if emotion_idx not in class_samples:
                     class_samples[emotion_idx] = []
                 class_samples[emotion_idx].append(i)
+            
+            print(f"✅ 樣本分組完成，共 {len(class_samples)} 個類別")
             
             # 計算每個類別應該採樣的數量
             samples_per_class = max_samples // len(class_samples)
@@ -430,17 +433,21 @@ def create_dataloader(data_dir: str, batch_size: int, num_workers: int,
             print(f"📊 剩餘樣本分配：{remaining_samples}")
             
             # 從每個類別中採樣
+            print("🔄 開始從各類別採樣...")
             for emotion_idx in sorted(class_samples.keys()):
                 class_indices = class_samples[emotion_idx]
+                class_name = idx_to_class[emotion_idx]
+                print(f"  📂 處理類別 {emotion_idx} ({class_name}): 總樣本 {len(class_indices)} 個")
+                
                 # 如果該類別樣本不足，全部採樣
                 if len(class_indices) <= samples_per_class:
                     balanced_samples.extend(class_indices)
-                    print(f"  📂 類別 {emotion_idx} ({idx_to_class[emotion_idx]}): 採樣 {len(class_indices)} 個 (全部)")
+                    print(f"    ✅ 採樣 {len(class_indices)} 個 (全部)")
                 else:
                     # 隨機採樣指定數量
                     sampled_indices = random.sample(class_indices, samples_per_class)
                     balanced_samples.extend(sampled_indices)
-                    print(f"  📂 類別 {emotion_idx} ({idx_to_class[emotion_idx]}): 採樣 {samples_per_class} 個")
+                    print(f"    ✅ 隨機採樣 {samples_per_class} 個")
             
             # 分配剩餘樣本（優先分配給樣本較多的類別）
             if remaining_samples > 0:
@@ -452,6 +459,9 @@ def create_dataloader(data_dir: str, batch_size: int, num_workers: int,
                     if i >= remaining_samples:
                         break
                     
+                    class_name = idx_to_class[emotion_idx]
+                    print(f"  ➕ 為類別 {emotion_idx} ({class_name}) 分配額外樣本...")
+                    
                     # 找出尚未採樣的樣本
                     sampled_for_class = [idx for idx in balanced_samples if dataset.samples[idx][1] == emotion_idx]
                     available_indices = [idx for idx in class_indices if idx not in sampled_for_class]
@@ -460,13 +470,17 @@ def create_dataloader(data_dir: str, batch_size: int, num_workers: int,
                         # 隨機選擇一個未採樣的樣本
                         additional_sample = random.choice(available_indices)
                         balanced_samples.append(additional_sample)
-                        print(f"  ➕ 類別 {emotion_idx} ({idx_to_class[emotion_idx]}): 額外採樣 1 個")
+                        print(f"    ✅ 額外採樣 1 個")
+                    else:
+                        print(f"    ⚠️  無可用樣本")
             
             # 更新資料集樣本
+            print("🔄 更新資料集樣本...")
             dataset.samples = [dataset.samples[i] for i in balanced_samples]
             print(f"🎯 平衡採樣完成！實際樣本數：{len(dataset)}")
             
             # 驗證採樣結果
+            print("📊 驗證採樣結果...")
             class_counts = {}
             for _, emotion_idx, _ in dataset.samples:
                 if emotion_idx not in class_counts:
@@ -482,17 +496,23 @@ def create_dataloader(data_dir: str, batch_size: int, num_workers: int,
             print("🎯 實現平衡採樣...")
             
             # 獲取所有樣本的類別標籤
+            print("📊 正在獲取樣本類別標籤...")
             all_labels = []
-            for i in range(len(dataset)):
+            for i in tqdm(range(len(dataset)), desc="獲取樣本標籤"):
                 _, label = dataset[i]
                 all_labels.append(label)
             
+            print("✅ 樣本標籤獲取完成")
+            
             # 按類別分組樣本索引
+            print("📊 正在按類別分組樣本索引...")
             class_indices = {}
             for i, label in enumerate(all_labels):
                 if label not in class_indices:
                     class_indices[label] = []
                 class_indices[label].append(i)
+            
+            print(f"✅ 樣本索引分組完成，共 {len(class_indices)} 個類別")
             
             # 計算每個類別應該採樣的數量
             samples_per_class = max_samples // len(class_indices)
@@ -502,18 +522,22 @@ def create_dataloader(data_dir: str, batch_size: int, num_workers: int,
             print(f"📊 剩餘樣本分配：{remaining_samples}")
             
             # 從每個類別中採樣
+            print("🔄 開始從各類別採樣...")
             balanced_indices = []
             for class_label in sorted(class_indices.keys()):
                 class_idx_list = class_indices[class_label]
+                class_name = idx_to_class[class_label]
+                print(f"  📂 處理類別 {class_label} ({class_name}): 總樣本 {len(class_idx_list)} 個")
+                
                 # 如果該類別樣本不足，全部採樣
                 if len(class_idx_list) <= samples_per_class:
                     balanced_indices.extend(class_idx_list)
-                    print(f"  📂 類別 {class_label} ({idx_to_class[class_label]}): 採樣 {len(class_idx_list)} 個 (全部)")
+                    print(f"    ✅ 採樣 {len(class_idx_list)} 個 (全部)")
                 else:
                     # 隨機採樣指定數量
                     sampled_indices = random.sample(class_idx_list, samples_per_class)
                     balanced_indices.extend(sampled_indices)
-                    print(f"  📂 類別 {class_label} ({idx_to_class[class_label]}): 採樣 {samples_per_class} 個")
+                    print(f"    ✅ 隨機採樣 {samples_per_class} 個")
             
             # 分配剩餘樣本（優先分配給樣本較多的類別）
             if remaining_samples > 0:
@@ -525,6 +549,9 @@ def create_dataloader(data_dir: str, batch_size: int, num_workers: int,
                     if i >= remaining_samples:
                         break
                     
+                    class_name = idx_to_class[class_label]
+                    print(f"  ➕ 為類別 {class_label} ({class_name}) 分配額外樣本...")
+                    
                     # 找出尚未採樣的樣本
                     sampled_for_class = [idx for idx in balanced_indices if all_labels[idx] == class_label]
                     available_indices = [idx for idx in class_idx_list if idx not in sampled_for_class]
@@ -533,13 +560,17 @@ def create_dataloader(data_dir: str, batch_size: int, num_workers: int,
                         # 隨機選擇一個未採樣的樣本
                         additional_sample = random.choice(available_indices)
                         balanced_indices.append(additional_sample)
-                        print(f"  ➕ 類別 {class_label} ({idx_to_class[class_label]}): 額外採樣 1 個")
+                        print(f"    ✅ 額外採樣 1 個")
+                    else:
+                        print(f"    ⚠️  無可用樣本")
             
             # 創建平衡採樣的子集
+            print("🔄 創建平衡採樣的子集...")
             dataset = Subset(dataset, balanced_indices)
             print(f"🎯 平衡採樣完成！實際樣本數：{len(dataset)}")
             
             # 驗證採樣結果
+            print("📊 驗證採樣結果...")
             class_counts = {}
             for i in range(len(dataset)):
                 _, label = dataset[i]
