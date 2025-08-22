@@ -40,6 +40,58 @@ print(f"PyTorch 版本：{torch.__version__}")
 
 ### 3. 執行評估腳本
 
+#### 🎯 推薦方法：在 Colab 中執行（避免 Drive 掛載衝突）
+
+```python
+# 1) 掛載 Drive（如果資料或權重在 Drive）
+from google.colab import drive
+drive.mount('/content/drive')
+
+# 2) 設定路徑
+DATA_DIR = '/content/drive/MyDrive/datasets/AffectNet/Test'     # 指向您的資料夾
+WEIGHTS  = '/content/drive/MyDrive/Models/ResEmoteNet/affectnet7_model.pth'  # 權重
+
+# 3) 執行評估（腳本會自動檢測已掛載的 Drive）
+!python eval_dataset_colab.py \
+    --data_dir "$DATA_DIR" \
+    --weights "$WEIGHTS" \
+    --max_samples 1000 \
+    --plot \
+    --save_to_drive \
+    --drive_folder "Quick_Test_Results"
+```
+
+#### 替代方法：直接在 Colab 中執行 Python 代碼
+
+```python
+# 1) 掛載 Drive
+from google.colab import drive
+drive.mount('/content/drive')
+
+# 2) 設定路徑
+DATA_DIR = '/content/drive/MyDrive/datasets/AffectNet/Test'
+WEIGHTS  = '/content/drive/MyDrive/Models/ResEmoteNet/affectnet7_model.pth'
+
+# 3) 執行評估（使用 Python 而不是 shell 命令）
+import subprocess
+import sys
+
+cmd = [
+    sys.executable, 'eval_dataset_colab.py',
+    '--data_dir', DATA_DIR,
+    '--weights', WEIGHTS,
+    '--max_samples', '1000',
+    '--plot',
+    '--save_to_drive',
+    '--drive_folder', 'Quick_Test_Results'
+]
+
+result = subprocess.run(cmd, capture_output=True, text=True)
+print("STDOUT:", result.stdout)
+if result.stderr:
+    print("STDERR:", result.stderr)
+```
+
 #### 基本用法（只保存到本地，帶時間戳記）：
 ```bash
 !python eval_dataset_colab.py \
@@ -236,6 +288,46 @@ print(f"PyTorch 版本：{torch.__version__}")
 # 或者安裝特定版本
 !pip install torch==2.2.0 torchvision==0.17.0
 ```
+
+### 問題：Google Drive 掛載衝突
+**解決方案**：
+```python
+# 方法一：重新啟動 Colab 運行時
+# Runtime -> Restart runtime
+
+# 方法二：檢查 Drive 是否已經掛載
+import os
+if os.path.exists('/content/drive/MyDrive'):
+    print("Drive 已經掛載")
+else:
+    print("Drive 未掛載")
+
+# 方法三：使用 Python 代碼執行而不是 shell 命令
+import subprocess
+import sys
+
+cmd = [
+    sys.executable, 'eval_dataset_colab.py',
+    '--data_dir', '/content/drive/MyDrive/datasets/AffectNet/Test',
+    '--weights', '/content/drive/MyDrive/Models/ResEmoteNet/affectnet7_model.pth',
+    '--max_samples', '1000',
+    '--plot',
+    '--save_to_drive',
+    '--drive_folder', 'Quick_Test_Results'
+]
+
+result = subprocess.run(cmd, capture_output=True, text=True)
+print("STDOUT:", result.stdout)
+if result.stderr:
+    print("STDERR:", result.stderr)
+```
+
+### 問題：Drive 掛載後腳本仍嘗試掛載
+**解決方案**：
+腳本已經更新，會自動檢測已掛載的 Drive。如果仍有問題，請：
+1. 確保使用最新版本的腳本
+2. 檢查腳本中的 `mount_google_drive()` 函數是否正確
+3. 使用 `--no_timestamp` 參數測試
 
 ## 📞 支援
 

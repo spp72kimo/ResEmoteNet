@@ -47,13 +47,33 @@ def generate_filename_with_timestamp(base_name: str, extension: str = None) -> s
 def mount_google_drive():
     """掛載 Google Drive 到 Colab"""
     try:
-        from google.colab import drive
-        drive.mount('/content/drive')
-        print("✅ Google Drive 已成功掛載到 /content/drive")
-        return True
+        # 首先檢查是否已經掛載
+        if os.path.exists('/content/drive/MyDrive'):
+            print("✅ Google Drive 已經掛載在 /content/drive")
+            return True
+        
+        # 檢查是否在 Colab 環境中
+        try:
+            from google.colab import drive
+            print("🔄 正在掛載 Google Drive...")
+            drive.mount('/content/drive')
+            print("✅ Google Drive 已成功掛載到 /content/drive")
+            return True
+        except Exception as e:
+            print(f"⚠️  Drive 掛載失敗：{str(e)}")
+            return False
+            
     except ImportError:
         print("⚠️  不在 Colab 環境中，跳過 Drive 掛載")
         return False
+    except Exception as e:
+        print(f"⚠️  掛載過程中發生錯誤：{str(e)}")
+        return False
+
+
+def check_drive_mounted() -> bool:
+    """檢查 Google Drive 是否已經掛載"""
+    return os.path.exists('/content/drive/MyDrive')
 
 
 def get_drive_path(base_path: str = None) -> str:
