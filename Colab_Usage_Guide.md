@@ -6,8 +6,36 @@
 將修改後的 `eval_dataset_colab.py` 腳本上傳到 Colab 環境中。
 
 ### 2. 安裝依賴包
+
+#### 方法一：使用 Colab 專用 requirements（推薦）
 ```python
-!pip install -r requirements.txt
+!pip install -r requirements_colab.txt
+```
+
+#### 方法二：手動安裝核心套件
+```python
+# 安裝 PyTorch（Colab 預設已安裝，但版本可能較舊）
+!pip install torch>=2.2.0 torchvision>=0.17.0
+
+# 安裝其他必要套件
+!pip install numpy>=1.26.0 scikit-learn>=1.4.0
+!pip install opencv-python>=4.9.0 Pillow>=10.0.0
+!pip install matplotlib>=3.8.0 seaborn>=0.13.0
+!pip install pandas>=2.0.0 tqdm>=4.65.0
+```
+
+#### 方法三：檢查並升級現有套件
+```python
+# 檢查 Python 版本
+import sys
+print(f"Python 版本：{sys.version}")
+
+# 檢查 PyTorch 版本
+import torch
+print(f"PyTorch 版本：{torch.__version__}")
+
+# 如果需要升級 PyTorch
+!pip install --upgrade torch torchvision
 ```
 
 ### 3. 執行評估腳本
@@ -188,6 +216,27 @@ Google Drive/MyDrive/
 - 縮短基礎檔案名稱
 - 檢查檔案系統的長度限制
 
+### 問題：套件安裝失敗
+**解決方案**：
+- 使用 `requirements_colab.txt` 而不是 `requirements.txt`
+- 檢查 Python 版本兼容性
+- 手動安裝核心套件
+- 重啟 Colab 運行時
+
+### 問題：PyTorch 版本不兼容
+**解決方案**：
+```python
+# 檢查當前版本
+import torch
+print(f"PyTorch 版本：{torch.__version__}")
+
+# 升級到兼容版本
+!pip install --upgrade torch torchvision
+
+# 或者安裝特定版本
+!pip install torch==2.2.0 torchvision==0.17.0
+```
+
 ## 📞 支援
 
 如果遇到問題，請檢查：
@@ -196,3 +245,25 @@ Google Drive/MyDrive/
 3. 數據集格式是否符合要求
 4. 模型文件是否完整
 5. 時間戳記是否正確生成
+6. Python 版本是否兼容
+
+## 🆘 緊急故障排除
+
+如果所有方法都失敗，請嘗試：
+
+```python
+# 1. 重啟 Colab 運行時
+# Runtime -> Restart runtime
+
+# 2. 重新安裝所有套件
+!pip install --upgrade pip
+!pip install torch torchvision numpy scikit-learn opencv-python Pillow matplotlib seaborn pandas tqdm
+
+# 3. 檢查環境
+import sys
+print(f"Python: {sys.version}")
+import torch
+print(f"PyTorch: {torch.__version__}")
+import numpy as np
+print(f"NumPy: {np.__version__}")
+```
