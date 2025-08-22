@@ -215,6 +215,22 @@ def load_model(weights_path: str, device: torch.device) -> torch.nn.Module:
     return model
 
 
+def convert_numpy_types(obj):
+    """將 numpy 類型轉換為 Python 原生類型，以便 JSON 序列化"""
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {key: convert_numpy_types(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy_types(item) for item in obj]
+    else:
+        return obj
+
+
 def calculate_metrics(y_true: List[int], y_pred: List[int], idx_to_class: Dict[int, str]) -> Dict:
     """計算詳細的評估指標"""
     # 轉換為 numpy 數組
@@ -243,7 +259,7 @@ def calculate_metrics(y_true: List[int], y_pred: List[int], idx_to_class: Dict[i
     # 計算整體準確率
     overall_accuracy = np.sum(cm.diagonal()) / np.sum(cm)
     
-    return {
+    result = {
         'overall_accuracy': overall_accuracy,
         'per_class_accuracy': {idx_to_class[i]: acc for i, acc in enumerate(per_class_accuracy)},
         'per_class_precision': {idx_to_class[i]: prec for i, prec in enumerate(precision)},
@@ -259,6 +275,9 @@ def calculate_metrics(y_true: List[int], y_pred: List[int], idx_to_class: Dict[i
         'confusion_matrix': cm.tolist(),
         'confusion_matrix_labels': [idx_to_class[i] for i in range(len(idx_to_class))]
     }
+    
+    # 轉換 numpy 類型為 Python 原生類型
+    return convert_numpy_types(result)
 
 def calculate_roc_auc(y_true: List[int], y_pred_probs: np.ndarray, idx_to_class: Dict[int, str]) -> Dict:
     """計算 ROC 曲線和 AUC 值"""
@@ -274,7 +293,7 @@ def calculate_roc_auc(y_true: List[int], y_pred_probs: np.ndarray, idx_to_class:
             fpr, tpr, _ = roc_curve(y_true_bin[:, i], y_pred_probs[:, i])
             auc_score = auc(fpr, tpr)
             roc_data[class_name] = {'fpr': fpr.tolist(), 'tpr': tpr.tolist()}
-            auc_scores[class_name] = auc_score
+            auc_scores[class_name] = float(auc_score)  # 確保是 Python float
     
     # 計算 micro-average ROC 和 AUC
     y_true_bin_ravel = y_true_bin.ravel()
@@ -283,7 +302,7 @@ def calculate_roc_auc(y_true: List[int], y_pred_probs: np.ndarray, idx_to_class:
         fpr_micro, tpr_micro, _ = roc_curve(y_true_bin_ravel, y_pred_probs_ravel)
         auc_micro = auc(fpr_micro, tpr_micro)
         roc_data['micro'] = {'fpr': fpr_micro.tolist(), 'tpr': tpr_micro.tolist()}
-        auc_scores['micro'] = auc_micro
+        auc_scores['micro'] = float(auc_micro)  # 確保是 Python float
     
     return {
         'roc_data': roc_data,
@@ -565,6 +584,10 @@ def main():
     # 添加時間戳記信息
     metrics['timestamp'] = get_timestamp()
     metrics['evaluation_time'] = datetime.now().isoformat()
+
+    # 轉換所有 numpy 類型為 Python 原生類型，以便 JSON 序列化
+    print("🔄 正在準備 JSON 序列化...")
+    metrics = convert_numpy_types(metrics)
 
     # 保存詳細報告
     with open(report_filename, 'w', encoding='utf-8') as f:
