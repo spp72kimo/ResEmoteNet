@@ -3,6 +3,7 @@ import argparse
 import json
 import time
 from typing import Dict, List, Tuple
+from datetime import datetime
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -18,6 +19,29 @@ from torchvision import datasets, transforms
 from tqdm.auto import tqdm
 
 from approach.ResEmoteNet import ResEmoteNet
+
+
+def get_timestamp():
+    """獲取當前時間戳記，格式：YYYYMMDD_HHMMSS"""
+    return datetime.now().strftime("%Y%m%d_%H%M%S")
+
+
+def generate_filename_with_timestamp(base_name: str, extension: str = None) -> str:
+    """生成帶有時間戳記的檔案名稱"""
+    timestamp = get_timestamp()
+    if extension:
+        # 如果提供了副檔名，確保格式正確
+        if not extension.startswith('.'):
+            extension = '.' + extension
+        return f"{base_name}_{timestamp}{extension}"
+    else:
+        # 如果沒有提供副檔名，從 base_name 中提取
+        name_parts = base_name.rsplit('.', 1)
+        if len(name_parts) == 2:
+            base, ext = name_parts
+            return f"{base}_{timestamp}.{ext}"
+        else:
+            return f"{base_name}_{timestamp}"
 
 
 def mount_google_drive():
@@ -394,11 +418,27 @@ def main():
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--num_workers', type=int, default=2)
     parser.add_argument('--max_samples', type=int, default=None, help='限制測試的最大樣本數（用於快速測試）')
-    parser.add_argument('--out', default='eval_report.json', help='輸出 JSON 報告')
+    parser.add_argument('--out', default='eval_report.json', help='輸出 JSON 報告文件名')
     parser.add_argument('--plot', action='store_true', help='是否生成圖表')
     parser.add_argument('--drive_folder', default='ResEmoteNet_Results', help='Google Drive 中的資料夾名稱')
     parser.add_argument('--save_to_drive', action='store_true', help='是否保存結果到 Google Drive')
+    parser.add_argument('--no_timestamp', action='store_true', help='不在檔案名稱後加上時間戳記')
     args = parser.parse_args()
+
+    # 生成帶有時間戳記的檔案名稱
+    if args.no_timestamp:
+        report_filename = args.out
+        confusion_matrix_filename = 'confusion_matrix.png'
+        roc_curves_filename = 'roc_curves.png'
+    else:
+        report_filename = generate_filename_with_timestamp(args.out)
+        confusion_matrix_filename = generate_filename_with_timestamp('confusion_matrix', 'png')
+        roc_curves_filename = generate_filename_with_timestamp('roc_curves', 'png')
+        
+        print(f"📅 使用時間戳記：{get_timestamp()}")
+        print(f"📄 報告檔案：{report_filename}")
+        print(f"📊 混淆矩陣：{confusion_matrix_filename}")
+        print(f"📈 ROC 曲線：{roc_curves_filename}")
 
     # 嘗試掛載 Google Drive
     drive_mounted = False
@@ -433,14 +473,18 @@ def main():
     if args.max_samples:
         metrics['max_samples_limit'] = args.max_samples
         metrics['note'] = f"測試限制為 {args.max_samples} 個樣本"
+    
+    # 添加時間戳記信息
+    metrics['timestamp'] = get_timestamp()
+    metrics['evaluation_time'] = datetime.now().isoformat()
 
     # 保存詳細報告
-    with open(args.out, 'w', encoding='utf-8') as f:
+    with open(report_filename, 'w', encoding='utf-8') as f:
         json.dump(metrics, f, ensure_ascii=False, indent=2)
     
     # 如果啟用了 Drive 保存，也保存報告到 Drive
     if args.save_to_drive and drive_mounted:
-        drive_report_path = os.path.join(drive_results_folder, args.out)
+        drive_report_path = os.path.join(drive_results_folder, report_filename)
         with open(drive_report_path, 'w', encoding='utf-8') as f:
             json.dump(metrics, f, ensure_ascii=False, indent=2)
         print(f"📄 評估報告已保存至 Google Drive：{drive_report_path}")
@@ -453,13 +497,13 @@ def main():
         plot_confusion_matrix(
             np.array(metrics['confusion_matrix']), 
             metrics['confusion_matrix_labels'],
-            'confusion_matrix.png',
+            confusion_matrix_filename,
             drive_folder
         )
         plot_roc_curves(
             metrics['roc_data'], 
             metrics['auc_scores'],
-            'roc_curves.png',
+            roc_curves_filename,
             drive_folder
         )
 
@@ -494,13 +538,20 @@ def main():
     print(f"模型大小：{efficiency_metrics['model_size_mb']} MB")
     print(f"平均推理時間：{efficiency_metrics['avg_inference_time_ms']} ± {efficiency_metrics['std_inference_time_ms']} ms")
     
-    print(f"\n報告已輸出：{args.out}")
+    print(f"\n報告已輸出：{report_filename}")
     if args.plot:
-        print("圖表已生成：confusion_matrix.png, roc_curves.png")
+        print(f"圖表已生成：{confusion_matrix_filename}, {roc_curves_filename}")
     
     if args.save_to_drive and drive_mounted:
         print(f"📁 所有結果已保存至 Google Drive 資料夾：{args.drive_folder}")
         print(f"📍 Drive 路徑：{drive_results_folder}")
+    
+    # 顯示檔案列表
+    print(f"\n📋 本次評估生成的文件：")
+    print(f"  📄 JSON 報告：{report_filename}")
+    if args.plot:
+        print(f"  📊 混淆矩陣：{confusion_matrix_filename}")
+        print(f"  📈 ROC 曲線：{roc_curves_filename}")
 
 
 if __name__ == '__main__':
