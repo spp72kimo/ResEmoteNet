@@ -202,27 +202,81 @@ class FaceDetectionDataset:
         self.samples = self._scan_dataset()
         print(f"📊 資料集掃描完成：找到 {len(self.samples)} 個有效樣本")
     
+    def _get_emotion_index(self, emotion_dir: str) -> int:
+        """獲取情緒類別索引"""
+        # 擴展的情緒類別映射，支援多種命名方式
+        emotion_mapping = {
+            # 標準英文名稱
+            'happy': 0, 'surprise': 1, 'sad': 2, 'anger': 3,
+            'disgust': 4, 'fear': 5, 'neutral': 6,
+            # 常見變體
+            'happiness': 0, 'happ': 0, 'joy': 0,
+            'surprised': 1, 'surpr': 1,
+            'sadness': 2, 'sad_': 2,
+            'angry': 3, 'ang': 3,
+            'disgusted': 4, 'disg': 4,
+            'fearful': 5, 'fear_': 5,
+            'neutral_': 6, 'neut': 6,
+            # 數字編號（如果資料夾使用數字命名）
+            '0': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6,
+            # 中文名稱支援
+            '快樂': 0, '開心': 0, '高興': 0,
+            '驚訝': 1, '驚奇': 1,
+            '悲傷': 2, '傷心': 2,
+            '憤怒': 3, '生氣': 3,
+            '厭惡': 4, '噁心': 4,
+            '恐懼': 5, '害怕': 5,
+            '中性': 6, '平靜': 6
+        }
+        
+        emotion_name = emotion_dir.lower().strip()
+        
+        # 嘗試直接匹配
+        if emotion_name in emotion_mapping:
+            return emotion_mapping[emotion_name]
+        
+        # 嘗試部分匹配（檢查是否包含關鍵字）
+        for key, value in emotion_mapping.items():
+            if key in emotion_name or emotion_name in key:
+                return value
+        
+        # 如果都無法匹配，拋出錯誤並顯示可用的選項
+        available_emotions = list(set(emotion_mapping.values()))
+        available_names = [k for k, v in emotion_mapping.items() if v in available_emotions]
+        raise ValueError(f"未知的情緒類別：'{emotion_dir}'。可用的類別包括：{available_names[:10]}...")
+
     def _scan_dataset(self) -> List[Tuple[str, int, Optional[Tuple[int, int, int, int]]]]:
         """掃描資料集，找出所有影像和人臉位置"""
         samples = []
+        
+        print(f"🔍 開始掃描資料集：{self.data_dir}")
         
         # 遍歷所有情緒類別資料夾
         for emotion_dir in os.listdir(self.data_dir):
             emotion_path = os.path.join(self.data_dir, emotion_dir)
             if not os.path.isdir(emotion_path):
+                print(f"⚠️  跳過非資料夾項目：{emotion_dir}")
                 continue
+            
+            print(f"📁 掃描情緒類別資料夾：{emotion_dir}")
             
             # 獲取情緒類別索引
             try:
                 emotion_idx = self._get_emotion_index(emotion_dir)
-            except ValueError:
+                print(f"  ✅ 情緒類別 '{emotion_dir}' 映射到索引 {emotion_idx}")
+            except ValueError as e:
+                print(f"  ❌ 無法識別情緒類別 '{emotion_dir}'：{e}")
                 continue
             
             # 掃描該情緒類別下的所有影像
+            image_count = 0
+            valid_count = 0
+            
             for img_name in os.listdir(emotion_path):
                 if not img_name.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp')):
                     continue
                 
+                image_count += 1
                 img_path = os.path.join(emotion_path, img_name)
                 
                 # 偵測人臉
@@ -230,23 +284,14 @@ class FaceDetectionDataset:
                 
                 if face_box is not None:
                     samples.append((img_path, emotion_idx, face_box))
+                    valid_count += 1
                 else:
-                    print(f"⚠️  未在 {img_path} 中偵測到人臉")
+                    print(f"  ⚠️  未在 {img_name} 中偵測到人臉")
+            
+            print(f"  📊 情緒類別 '{emotion_dir}'：總共 {image_count} 張影像，有效 {valid_count} 張")
         
+        print(f"📊 資料集掃描完成：找到 {len(samples)} 個有效樣本")
         return samples
-    
-    def _get_emotion_index(self, emotion_dir: str) -> int:
-        """獲取情緒類別索引"""
-        emotion_mapping = {
-            'happy': 0, 'surprise': 1, 'sad': 2, 'anger': 3,
-            'disgust': 4, 'fear': 5, 'neutral': 6
-        }
-        
-        emotion_name = emotion_dir.lower().strip()
-        if emotion_name in emotion_mapping:
-            return emotion_mapping[emotion_name]
-        else:
-            raise ValueError(f"未知的情緒類別：{emotion_dir}")
     
     def _detect_face_in_image(self, img_path: str) -> Optional[Tuple[int, int, int, int]]:
         """在單張影像中偵測人臉"""
@@ -303,9 +348,34 @@ def create_dataloader(data_dir: str, batch_size: int, num_workers: int,
     if not os.path.isdir(data_dir):
         raise FileNotFoundError(f"資料夾不存在：{data_dir}")
 
+    # 調試：顯示資料目錄結構
+    print(f"🔍 檢查資料目錄結構：{data_dir}")
+    try:
+        items = os.listdir(data_dir)
+        print(f"📁 資料目錄內容：{items}")
+        
+        # 檢查每個項目
+        for item in items:
+            item_path = os.path.join(data_dir, item)
+            if os.path.isdir(item_path):
+                sub_items = os.listdir(item_path)
+                print(f"  📂 {item}/ ({len(sub_items)} 個項目)")
+                if len(sub_items) > 0:
+                    # 顯示前幾個項目作為示例
+                    sample_items = sub_items[:5]
+                    print(f"    範例：{sample_items}")
+                    if len(sub_items) > 5:
+                        print(f"    ... 還有 {len(sub_items) - 5} 個項目")
+            else:
+                print(f"  📄 {item} (檔案)")
+    except Exception as e:
+        print(f"⚠️  無法讀取資料目錄內容：{e}")
+
     found = [d for d in os.listdir(data_dir) if os.path.isdir(os.path.join(data_dir, d))]
     if not found:
         raise ValueError(f"指定資料夾內沒有情緒子資料夾：{data_dir}")
+
+    print(f"✅ 找到 {len(found)} 個子資料夾：{found}")
 
     # 簡化的類別映射
     idx_to_class = {0: 'happy', 1: 'surprise', 2: 'sad', 3: 'anger', 
